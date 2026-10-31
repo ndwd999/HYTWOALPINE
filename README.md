@@ -24,7 +24,7 @@
 # Alpine 需要先装 bash
 apk add --no-cache bash curl
 
-curl -fsSLO https://raw.githubusercontent.com/<你的用户名>/<仓库名>/main/hysteria.sh
+curl -fsSLO https://raw.githubusercontent.com/ndwd999/HYTWOALPINE/main/hysteria.sh
 chmod +x hysteria.sh
 ./hysteria.sh
 ```
