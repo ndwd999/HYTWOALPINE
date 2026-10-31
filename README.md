@@ -32,17 +32,18 @@ apk add --no-cache bash ca-certificates
 
 ```bash
 # 方式 A：wget（Alpine 开箱即用，推荐）
-wget -O hysteria.sh https://raw.githubusercontent.com/ndwd999/HYTWOALPINE/main/hysteria.sh
+wget -O hysteria.sh https://raw.githubusercontent.com/ndwd999/HYTWOALPINE/main/hysteria.sh \
+  && [ -s hysteria.sh ] && echo "下载完成：$(wc -c < hysteria.sh) 字节"
 
-# 方式 B：curl
+# 方式 B：curl（自带失败即报错，不会留下空文件）
 curl -fsSL -o hysteria.sh https://raw.githubusercontent.com/ndwd999/HYTWOALPINE/main/hysteria.sh
 
 chmod +x hysteria.sh
 ./hysteria.sh
 ```
 
-> `-O` 是大写字母，表示"保存到指定文件名"，目标已存在会被覆盖。
-> 下载完可以先自检：`bash -n hysteria.sh`（无输出即语法正常），再花一分钟扫一眼内容。
+> `-O` 是**大写字母**，表示"保存到指定文件名"；写小写 `-o` 在 busybox 里是"日志文件"，会把网页内容写进日志而脚本是空的。
+> **务必确认文件非空**：`wget -O` 在网络中断时会留下 0 字节文件，而 `bash -n` 对空文件同样返回成功，直接执行则毫无反应、容易被误认为"脚本有问题"。上面方式 A 已内置 `[ -s ]` 检查。正常大小约 25 KB。
 > 若 `wget` 报 `not an http or ftp url` 或证书错误，说明该系统的 busybox 未编译 TLS 支持，改用方式 B（`apk add curl`），或临时加 `--no-check-certificate`（不推荐，仅限排障）。
 >
 > 不建议 `curl ... | bash` 直接管道执行 —— 仓库一旦被篡改，你会静默执行新代码，且无法先审阅。
