@@ -1,5 +1,7 @@
 # Hysteria 2 一键安装脚本 · Alpine 优化版
 
+[![shellcheck](https://github.com/ndwd999/HYTWOALPINE/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/ndwd999/HYTWOALPINE/actions/workflows/shellcheck.yml)
+
 面向 **Alpine Linux / 低配 VPS（128MB 起）** 的 Hysteria 2 部署脚本，单文件、无外部依赖、交互式菜单。
 本仓库是对 [Misaka-blog](https://github.com/Misaka-blog/hysteria-install) 原脚本的**安全重写**，不是简单移植。
 
