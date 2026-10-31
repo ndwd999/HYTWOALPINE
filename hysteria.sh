@@ -14,10 +14,11 @@
 #    6. 自动识别 CPU 架构（amd64 / arm64 / arm / 386 / loong64 / riscv64 ...）
 #    7. Alpine 上自动注册 OpenRC 服务并开机自启；无 OpenRC 时回退 nohup
 #    8. 修改端口 / 密码后自动同步服务端、客户端与分享链接，不再出现配置不一致
+#    9. 重排菜单与安装向导版式：中文按显示宽度对齐，框线随终端宽度自适应
 #
 set -o pipefail
 
-SCRIPT_VERSION="1.1.1"
+SCRIPT_VERSION="1.1.2"
 UPSTREAM_REPO="apernet/hysteria"
 DL_BASE="https://github.com/${UPSTREAM_REPO}/releases/latest/download"
 
@@ -29,27 +30,131 @@ PIDFILE="/run/hysteria.pid"
 LOGFILE="/var/log/hysteria.log"
 INIT_FILE="/etc/init.d/hysteria"
 
-# ---------- 输出 ----------
+# ---------- 输出与排版 ----------
 if [ -t 1 ]; then
     RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'
-    BLUE=$'\033[36m'; BOLD=$'\033[1m'; NC=$'\033[0m'
+    CYAN=$'\033[36m'; BOLD=$'\033[1m'; DIM=$'\033[2m'; NC=$'\033[0m'
 else
-    RED=; GREEN=; YELLOW=; BLUE=; BOLD=; NC=
+    RED=; GREEN=; YELLOW=; CYAN=; BOLD=; DIM=; NC=
 fi
 
-info() { printf '%s[i]%s %s\n' "$BLUE"   "$NC" "$*"; }
-ok()   { printf '%s[+]%s %s\n' "$GREEN"  "$NC" "$*"; }
-warn() { printf '%s[!]%s %s\n' "$YELLOW" "$NC" "$*"; }
-err()  { printf '%s[x]%s %s\n' "$RED"    "$NC" "$*" >&2; }
+info() { printf '  %s·%s %s\n' "$CYAN"   "$NC" "$*"; }
+ok()   { printf '  %s✓%s %s\n' "$GREEN"  "$NC" "$*"; }
+warn() { printf '  %s!%s %s\n' "$YELLOW" "$NC" "$*" >&2; }
+err()  { printf '  %s✗%s %s\n' "$RED"    "$NC" "$*" >&2; }
 die()  { err "$*"; exit 1; }
-hr()   { printf '%s\n' "------------------------------------------------------------"; }
+
+# 去掉 ANSI 转义序列，供宽度计算使用（否则着色行会被算长）
+strip_ansi() {
+    local s="$1"
+    s=${s//$'\033[0m'/}
+    s=${s//$'\033[1m'/}
+    s=${s//$'\033[2m'/}
+    s=${s//$'\033[31m'/}
+    s=${s//$'\033[32m'/}
+    s=${s//$'\033[33m'/}
+    s=${s//$'\033[36m'/}
+    printf '%s' "$s"
+}
+
+# 显示宽度：ASCII 占 1 列，CJK 与全角字符占 2 列。
+# 按 UTF-8 首字节判断，不依赖 locale（Alpine 默认 C locale），od/awk 为 busybox 自带
+dw() {
+    local n
+    n=$(strip_ansi "$1" | od -An -tu1 -v 2>/dev/null | awk '
+        { for (i = 1; i <= NF; i++) {
+              v = $i
+              if (v < 128)       w += 1
+              else if (v < 192)  w += 0
+              else if (v < 224)  w += 1
+              else if (v < 240)  w += (v >= 227 && v <= 239) ? 2 : 1
+              else               w += 2
+          } }
+        END { print w + 0 }')
+    # od 不可用时退回字符数，保证排版不至于崩溃
+    case "$n" in ''|*[!0-9]*) n=${#1} ;; esac
+    printf '%s' "$n"
+}
+
+# 右侧补空格到指定显示宽度
+pad() {
+    local s="$1" n
+    n=$(( ${2:-0} - $(dw "$s") ))
+    case "$n" in ''|*[!0-9-]*) n=0 ;; esac
+    [ "$n" -gt 0 ] || n=0
+    printf '%s%*s' "$s" "$n" ''
+}
+
+# 重复输出字符 s 共 n 次
+rep() {
+    local s="$1" n="${2:-0}" out=""
+    case "$n" in ''|*[!0-9]*) n=0 ;; esac
+    while [ "$n" -gt 0 ]; do out="$out$s"; n=$((n - 1)); done
+    printf '%s' "$out"
+}
+
+# 框内宽度：跟随终端并夹在 54-70 列之间，手机 SSH 也不会折行
+UI_W=62
+ui_init() {
+    local c="${COLUMNS:-}"
+    [ -z "$c" ] && c=$(stty size 2>/dev/null | awk '{print $2}')
+    case "$c" in ''|*[!0-9]*) c=66 ;; esac
+    [ "$c" -gt 70 ] && c=70
+    [ "$c" -lt 58 ] && c=58
+    UI_W=$((c - 4))
+}
+
+b_top() { printf '  %s╭%s╮%s\n' "$DIM" "$(rep '─' "$UI_W")" "$NC"; }
+b_mid() { printf '  %s├%s┤%s\n' "$DIM" "$(rep '─' "$UI_W")" "$NC"; }
+b_bot() { printf '  %s╰%s╯%s\n' "$DIM" "$(rep '─' "$UI_W")" "$NC"; }
+b_gap() { printf '  %s│%s%s%s│%s\n' "$DIM" "$NC" "$(rep ' ' "$UI_W")" "$DIM" "$NC"; }
+b_row() { printf '  %s│%s%s%s│%s\n' "$DIM" "$NC" "$(pad " $1" "$UI_W")" "$DIM" "$NC"; }
+
+# 标题行：左文本 + 右对齐文本
+t_row() {
+    local l="$1" r="${2-}" g
+    if [ -n "$r" ]; then
+        g=$(( UI_W - 4 - $(dw "$l") - $(dw "$r") ))
+        case "$g" in ''|*[!0-9-]*) g=1 ;; esac
+        [ "$g" -lt 1 ] && g=1
+        b_row " $l$(rep ' ' "$g")$r"
+    else
+        b_row " $l"
+    fi
+}
+
+# 键值行：键固定占 8 列
+kv() { b_row " $(pad "$1" 8)$2"; }
+
+# 菜单项：编号 + 标签（占 12 列）+ 说明
+m_row() {
+    if [ -n "${3-}" ]; then
+        b_row " $1   $(pad "$2" 12)  $3"
+    else
+        b_row " $1   $2"
+    fi
+}
+
+# 流程分区标题
+section() { printf '\n  %s▸%s %s%s%s\n' "$CYAN" "$NC" "$BOLD" "$1" "$NC"; }
+# 整行分隔线，长度与下方卡片外框一致
+hrule()   { printf '  %s%s%s\n' "$DIM" "$(rep '─' $((UI_W + 2)))" "$NC"; }
+
+# 选项行：编号 + 名称（占 10 列）+ 说明
+opt() {
+    if [ -n "${3-}" ]; then
+        printf '  %s) %s    %s\n' "$1" "$(pad "$2" 10)" "$3"
+    else
+        printf '  %s) %s\n' "$1" "$2"
+    fi
+}
 
 ask() { # ask 变量名 "提示" [默认值]
     local __var="$1" __prompt="$2" __def="${3-}" __ans=""
     if [ -n "$__def" ]; then
-        printf '%s [%s]: ' "$__prompt" "$__def" >&2
+        printf '  %s [%s]: ' "$__prompt" "$__def" >&2
     else
-        printf '%s: ' "$__prompt" >&2
+        printf '  %s: ' "$__prompt" >&2
     fi
     IFS= read -r __ans || __ans=""
     [ -z "$__ans" ] && __ans="$__def"
@@ -58,7 +163,7 @@ ask() { # ask 变量名 "提示" [默认值]
 
 confirm() { # confirm "提示" -> y/n
     local a=""
-    printf '%s [y/N]: ' "$1" >&2
+    printf '  %s [y/N]: ' "$1" >&2
     IFS= read -r a || a=""
     case "$a" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
 }
@@ -285,16 +390,40 @@ EOF
 }
 
 show_config() {
-    [ -f "${CLIENT_DIR}/hy-client.yaml" ] || die "尚未安装，没有可显示的配置"
-    hr
-    printf '%s客户端配置%s  %s\n' "$BOLD" "$NC" "${CLIENT_DIR}/hy-client.yaml"
-    hr
-    cat "${CLIENT_DIR}/hy-client.yaml"
-    hr
-    printf '%s分享链接%s    %s\n' "$BOLD" "$NC" "${CLIENT_DIR}/url.txt"
-    hr
-    cat "${CLIENT_DIR}/url.txt"
-    hr
+    [ -f "${CLIENT_DIR}/hy-client.yaml" ] || die "尚未安装，请先执行安装（菜单 1）"
+    load_node_conf
+    ui_init
+
+    printf '\n'
+    b_top
+    b_gap
+    t_row "${BOLD}Hysteria 2 配置${NC}"
+    b_gap
+    b_mid
+    b_gap
+    kv "地址" "$(host_for_url):${HY_PORT}"
+    kv "密码" "${HY_PWD}"
+    kv "SNI"  "${HY_SNI}"
+    kv "伪装" "https://${HY_MASQ}"
+    if [ "$HY_INSECURE" = "1" ]; then
+        kv "证书" "自签（客户端需 insecure=true）"
+    else
+        kv "证书" "可信证书（ACME / 商业证书）"
+    fi
+    b_gap
+    b_mid
+    b_gap
+    b_row " ${BOLD}客户端配置${NC}"
+    b_row "   ${CLIENT_DIR}/hy-client.yaml"
+    b_row " ${BOLD}分享链接${NC}"
+    b_row "   ${CLIENT_DIR}/url.txt"
+    b_gap
+    b_bot
+
+    # 分享链接通常超过一行宽度，单独放在框外，避免撑破边框
+    printf '\n  %s分享链接%s（复制后导入客户端）\n' "$BOLD" "$NC"
+    sed 's/^/  /' "${CLIENT_DIR}/url.txt"
+    printf '\n'
 }
 
 # ---------- 下载与校验 ----------
@@ -423,17 +552,34 @@ svc_restart() {
 }
 
 svc_status() {
-    hr
-    if svc_running; then ok "运行状态：运行中"; else warn "运行状态：未运行"; fi
+    ui_init
+    local state
+    if svc_running; then
+        state="${GREEN}运行中${NC}"
+    else
+        state="${YELLOW}未运行${NC}"
+    fi
+
+    printf '\n'
+    b_top
+    b_gap
+    t_row "${BOLD}服务状态${NC}"
+    b_gap
+    b_mid
+    b_gap
+    kv "状态" "$state"
     if [ -f "$NODE_CONF" ]; then
         load_node_conf
-        printf '  监听端口 : %s/udp\n' "$HY_PORT"
-        printf '  伪装站点 : https://%s\n' "$HY_MASQ"
-        printf '  证书 SNI : %s\n' "$HY_SNI"
+        kv "监听" "${HY_PORT}/udp"
+        kv "地址" "$(host_for_url):${HY_PORT}"
+        kv "伪装" "https://${HY_MASQ}"
+        kv "SNI"  "${HY_SNI}"
     fi
-    printf '  配置文件 : %s\n' "${CONF_DIR}/config.yaml"
-    printf '  日志文件 : %s\n' "$LOGFILE"
-    hr
+    kv "配置" "${CONF_DIR}/config.yaml"
+    kv "日志" "$LOGFILE"
+    b_gap
+    b_bot
+    printf '\n'
 }
 
 # ---------- 证书 ----------
@@ -514,11 +660,12 @@ cert_custom() {
 
 select_cert() {
     local c=""
-    info "请选择证书类型："
-    printf '  1) 自签证书（默认，免域名）\n'
-    printf '  2) ACME 自动申请（需域名 + 80 端口）\n'
-    printf '  3) 使用已有证书文件\n'
-    ask c "请输入选项" "1"
+    section "选择证书"
+    opt 1 "自签证书" "免域名，客户端需 insecure=true"
+    opt 2 "ACME 证书" "需域名与 80 端口，自动续期"
+    opt 3 "已有证书" "手动指定证书与私钥路径"
+    printf '\n'
+    ask c "请选择" "1"
     case "$c" in
         1) cert_selfsigned ;;
         2) cert_acme ;;
@@ -530,12 +677,20 @@ select_cert() {
 # ---------- 安装 ----------
 do_install() {
     require_root
-    ensure_deps
+    ui_init
+
+    printf '\n'
+    hrule
+    printf '  %sHysteria 2 安装向导%s\n' "$BOLD" "$NC"
+    hrule
 
     if [ -f "$BIN" ] || [ -f "$NODE_CONF" ]; then
-        warn "检测到已安装的 Hysteria 2"
-        confirm "继续将覆盖现有配置，是否继续？" || { info "已取消"; return 0; }
+        warn "检测到已安装的 Hysteria 2，继续将覆盖现有配置"
+        confirm "确认继续？" || { info "已取消"; return 0; }
     fi
+
+    section "环境检查"
+    ensure_deps
 
     HY_ARCH="${HY_ARCH:-$(detect_arch)}"
     [ -n "$HY_ARCH" ] || die "无法识别 CPU 架构（$(uname -m)），可用 HY_ARCH 环境变量指定，例如 HY_ARCH=arm64"
@@ -552,9 +707,10 @@ do_install() {
 
     select_cert
 
+    section "端口与密码"
     local p=""
     while :; do
-        ask p "监听端口 [1-65535]，留空随机分配"
+        ask p "监听端口（1-65535，留空随机）"
         [ -z "$p" ] && p=$(shuf -i 20000-60000 -n 1 2>/dev/null || awk 'BEGIN{srand();print int(20000+rand()*40000)}')
         if ! valid_port "$p"; then warn "端口必须是 1-65535 的整数"; continue; fi
         if udp_port_in_use "$p"; then warn "UDP 端口 $p 已被占用，请更换"; continue; fi
@@ -578,20 +734,28 @@ do_install() {
     valid_site "$site" || die "伪装站点不合法（只允许字母、数字、点、连字符、冒号、下划线）"
     HY_MASQ="$site"
 
+    section "下载内核"
     download_verified "hysteria-linux-${HY_ARCH}" "$BIN"
 
+    section "写入配置"
     write_node_conf
     render_configs
 
+    section "启动服务"
     svc_start || die "服务未能启动，请检查 $LOGFILE"
 
-    ok "安装完成（脚本版本 ${SCRIPT_VERSION}）"
+    printf '\n'
+    ok "安装完成，以下为完整配置（脚本 v${SCRIPT_VERSION}）"
     show_config
-    hr
-    warn "NAT VPS 请确认 UDP ${HY_PORT} 已映射到公网；云厂商安全组也需放行"
-    printf '  放行示例：iptables -I INPUT -p udp --dport %s -j ACCEPT\n' "$HY_PORT"
-    printf '            nft add rule inet filter input udp dport %s accept\n' "$HY_PORT"
-    hr
+
+    printf '  %s下一步%s\n' "$BOLD" "$NC"
+    printf '    1. 客户端下载  https://github.com/apernet/hysteria/releases\n'
+    printf '    2. 导入上面的分享链接，或使用 %s/hy-client.yaml\n' "$CLIENT_DIR"
+    printf '    3. 放行 UDP %s（云厂商安全组与本机防火墙都要开）\n' "$HY_PORT"
+    printf '       %siptables -I INPUT -p udp --dport %s -j ACCEPT%s\n' "$DIM" "$HY_PORT" "$NC"
+    printf '       %snft add rule inet filter input udp dport %s accept%s\n' "$DIM" "$HY_PORT" "$NC"
+    printf '\n'
+    warn "NAT 型 VPS 需在面板上把 UDP ${HY_PORT} 映射到公网端口"
 }
 
 # ---------- 修改配置 ----------
@@ -599,8 +763,10 @@ do_change_port() {
     require_root
     load_node_conf
     local p="" old="$HY_PORT"
+    section "修改端口"
+    info "当前端口：${old}"
     while :; do
-        ask p "新端口 [1-65535]，留空随机分配"
+        ask p "新端口（1-65535，留空随机）"
         [ -z "$p" ] && p=$(shuf -i 20000-60000 -n 1 2>/dev/null || awk 'BEGIN{srand();print int(20000+rand()*40000)}')
         if ! valid_port "$p"; then warn "端口必须是 1-65535 的整数"; continue; fi
         [ "$p" = "$old" ] && { warn "与原端口相同"; continue; }
@@ -611,7 +777,7 @@ do_change_port() {
     write_node_conf
     render_configs
     svc_restart
-    ok "端口已由 ${old} 改为 ${p}，客户端配置与分享链接已同步更新"
+    ok "端口已由 ${old} 改为 ${p}，客户端配置与分享链接已同步"
     show_config
 }
 
@@ -619,6 +785,7 @@ do_change_pwd() {
     require_root
     load_node_conf
     local pw=""
+    section "修改密码"
     ask pw "新密码（留空自动生成）"
     if [ -z "$pw" ]; then
         pw=$(gen_pwd)
@@ -636,11 +803,12 @@ do_change_pwd() {
 
 do_change_conf() {
     local c=""
-    info "请选择要修改的项目："
-    printf '  1) 端口\n'
-    printf '  2) 密码\n'
-    printf '  3) 伪装站点\n'
-    ask c "请输入选项"
+    section "修改配置"
+    opt 1 "端口"     "更换 UDP 监听端口"
+    opt 2 "密码"     "重新设置认证密码"
+    opt 3 "伪装站点" "更换 masquerade 目标"
+    printf '\n'
+    ask c "请选择"
     case "$c" in
         1) do_change_port ;;
         2) do_change_pwd ;;
@@ -648,7 +816,9 @@ do_change_conf() {
             require_root
             load_node_conf
             local site=""
-            ask site "新的伪装站点（不含 https://）" "$HY_MASQ"
+            section "修改伪装站点"
+            info "当前站点：https://${HY_MASQ}"
+            ask site "新伪装站点（不含 https://）" "$HY_MASQ"
             site=${site#http://}; site=${site#https://}; site=${site%%/*}
             valid_site "$site" || die "伪装站点不合法（只允许字母、数字、点、连字符、冒号、下划线）"
             HY_MASQ="$site"
@@ -665,13 +835,13 @@ do_change_conf() {
 do_update() {
     require_root
     load_node_conf
-    local arch
+    section "更新内核"
+    local arch v=""
     arch="${HY_ARCH:-$(detect_arch)}"
     [ -n "$arch" ] || die "无法识别 CPU 架构"
     download_verified "hysteria-linux-${arch}" "$BIN"
     HY_ARCH="$arch"; write_node_conf
     svc_restart
-    local v=""
     if command -v timeout >/dev/null 2>&1; then
         v=$(timeout 5 "$BIN" version 2>/dev/null | head -1)
     fi
@@ -680,7 +850,9 @@ do_update() {
 
 do_uninstall() {
     require_root
-    confirm "确认卸载 Hysteria 2 并删除所有配置？" || { info "已取消"; return 0; }
+    section "卸载"
+    warn "将停止服务并删除二进制、配置、客户端文件与服务项"
+    confirm "确认卸载？" || { info "已取消"; return 0; }
     has_openrc && rc-update del hysteria default >/dev/null 2>&1 || true
     svc_stop >/dev/null
     rm -f "$INIT_FILE" "$BIN" "$PIDFILE" "$LOGFILE"
@@ -690,12 +862,13 @@ do_uninstall() {
 
 do_switch() {
     local c=""
-    info "请选择操作："
-    printf '  1) 启动\n'
-    printf '  2) 停止\n'
-    printf '  3) 重启\n'
-    printf '  4) 查看状态\n'
-    ask c "请输入选项"
+    section "服务操作"
+    opt 1 "启动"
+    opt 2 "停止"
+    opt 3 "重启"
+    opt 4 "查看状态"
+    printf '\n'
+    ask c "请选择"
     case "$c" in
         1) require_root; svc_start ;;
         2) require_root; svc_stop ;;
@@ -707,27 +880,39 @@ do_switch() {
 
 # ---------- 菜单 ----------
 banner() {
-    clear 2>/dev/null || true
-    printf '%s\n' "############################################################"
-    printf '#   %sHysteria 2 一键安装脚本 · Alpine 优化版%s\n' "$BOLD" "$NC"
-    printf '#   版本 %s\n' "$SCRIPT_VERSION"
-    printf '#   上游 %s · 原作者 Misaka-blog\n' "$UPSTREAM_REPO"
-    printf '%s\n\n' "############################################################"
+    ui_init
+    b_top
+    b_gap
+    t_row "${BOLD}Hysteria 2 · Alpine 一键脚本${NC}" "v${SCRIPT_VERSION}"
+    b_row " ${DIM}apernet/hysteria · OpenRC 托管 · SHA256 校验${NC}"
+    b_gap
+    b_mid
+    b_gap
+    m_row 1 "安装 / 重装" "下载内核，生成服务端与客户端配置"
+    m_row 2 "卸载"        "停止服务并删除全部文件"
+    b_gap
+    m_row 3 "服务管理"    "启动 / 停止 / 重启 / 状态"
+    m_row 4 "修改配置"    "端口 / 密码 / 伪装站点"
+    m_row 5 "查看配置"    "客户端 YAML 与分享链接"
+    m_row 6 "更新内核"    "校验 SHA256 后替换二进制"
+    b_gap
+    m_row 0 "退出"
+    b_gap
+    b_bot
 }
 
 menu() {
+    [ -t 0 ] || die "当前不是交互式终端，请先下载脚本再运行：
+    wget -O hysteria.sh https://raw.githubusercontent.com/ndwd999/HYTWOALPINE/main/hysteria.sh
+    bash hysteria.sh"
+
     local c=""
     while :; do
+        [ -t 1 ] && clear 2>/dev/null
+        printf '\n'
         banner
-        printf '  1) 安装 Hysteria 2\n'
-        printf '  2) 卸载 Hysteria 2\n'
-        printf '  -------------\n'
-        printf '  3) 启动 / 停止 / 重启 / 状态\n'
-        printf '  4) 修改配置（端口 / 密码 / 伪装站点）\n'
-        printf '  5) 显示客户端配置与分享链接\n'
-        printf '  6) 更新内核\n'
-        printf '  0) 退出\n\n'
-        ask c "请输入选项" "0"
+        printf '\n'
+        ask c "请选择操作" "0"
         case "$c" in
             1) do_install ;;
             2) do_uninstall ;;
@@ -735,30 +920,32 @@ menu() {
             4) do_change_conf ;;
             5) show_config ;;
             6) do_update ;;
-            0) exit 0 ;;
+            0|q|Q) printf '\n'; exit 0 ;;
             *) warn "无效选项：$c" ;;
         esac
-        printf '\n' >&2
-        printf '按回车返回菜单...' >&2
+        printf '\n  %s按回车返回主菜单%s' "$DIM" "$NC" >&2
         IFS= read -r _ || true
-        printf '\n' >&2
     done
 }
 
 usage() {
     cat <<EOF
-Hysteria 2 一键安装脚本 v${SCRIPT_VERSION}
+Hysteria 2 一键安装脚本 · Alpine 优化版  v${SCRIPT_VERSION}
 
-用法: $0 [选项]
+用法
+  $0                 进入交互式菜单
 
-  -h, --help     显示帮助
-  -V, --version  显示版本
+选项
+  -h, --help         显示本帮助
+  -V, --version      显示版本号
 
-不带参数运行进入交互式菜单。
+环境变量
+  HY_ARCH=arm64      强制指定 CPU 架构（默认自动识别）
+  HY_SKIP_VERIFY=1   无法获取官方哈希时仍继续安装（不建议）
 
-环境变量:
-  HY_ARCH=arm64        强制指定 CPU 架构（默认自动识别）
-  HY_SKIP_VERIFY=1     无法获取官方哈希时仍继续安装（不建议）
+说明
+  需 root 权限运行。Alpine 3.16+ 自动注册 OpenRC 服务并开机自启；
+  其他发行版可用，但开机自启仅对 Alpine 生效。
 EOF
 }
 

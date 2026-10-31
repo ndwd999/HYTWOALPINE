@@ -7,6 +7,25 @@
 
 ## [未发布]
 
+## [1.1.2] - 2026-10-31
+
+仅调整终端界面，安装逻辑与安全策略未变。
+
+### 修复
+
+- 修复主菜单框线破裂：标题行原本只有左边界 `#`，与上下两条 60 列横线不匹配，看起来像"框只画了一半"
+- 修复中文错列：原先 `printf` 按字节补位，一个汉字补 3 格却只占 2 列，导致右边框逐行错开。现在按**显示宽度**（ASCII 1 列、CJK 与全角 2 列）计算填充
+- 修复 `curl ... | bash` 方式运行时菜单无限刷屏：stdin 是管道而非终端，`read` 立即返回 EOF。现在检测到非交互输入直接提示"先下载再运行"并退出
+- 修复 `clear` 在非终端环境下的无谓报错
+
+### 变更
+
+- 安装向导拆为「环境检查 / 选择证书 / 端口与密码 / 下载内核 / 写入配置 / 启动服务」六个分段，每段独立标题
+- 配置与运行状态改为卡片式呈现，地址、密码、SNI、伪装站点、证书类型逐项对齐
+- 安装结束追加「下一步」指引：客户端下载地址、导入方式、放行 UDP 的 `iptables` / `nft` 示例
+- 框线宽度跟随终端自适应（内容区 54–70 列），窄屏 SSH 不再折行
+- 日志统一缩进 2 空格，前缀由 `[i] / [+] / [!] / [x]` 改为 `· / ✓ / ! / ✗`
+
 ## [1.1.1] - 2026-10-31
 
 ### 新增
@@ -58,6 +77,7 @@
 上游 [Misaka-blog/hysteria-install](https://github.com/Misaka-blog/hysteria-install) 派生的历史版本，
 未在本仓库保留。如需追溯，请查阅上游仓库。
 
-[未发布]: https://github.com/ndwd999/HYTWOALPINE/compare/v1.1.1...HEAD
+[未发布]: https://github.com/ndwd999/HYTWOALPINE/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/ndwd999/HYTWOALPINE/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/ndwd999/HYTWOALPINE/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/ndwd999/HYTWOALPINE/releases/tag/v1.1.0
