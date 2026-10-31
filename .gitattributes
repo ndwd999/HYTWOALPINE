@@ -12,7 +12,3 @@ LICENSE text eol=lf
 *.png   binary
 *.jpg   binary
 *.zip   binary
-
-# 发布压缩包不进入源码归档
-*.zip   export-ignore
-.github export-ignore
