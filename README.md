@@ -167,5 +167,6 @@ v1.1.0 是对原移植版本的安全重写：内核 SHA256 强制校验、凭�
 - 原脚本作者：[Misaka-blog](https://github.com/Misaka-blog)，思路与默认参数来自其项目
 - 内核：[apernet/hysteria](https://github.com/apernet/hysteria)（现迁移至 HyNetworks）
 - 本项目以 MIT 许可证发布，见 [LICENSE](LICENSE)
+- 参与贡献请遵守 [行为准则](CODE_OF_CONDUCT.md)，提交前请读 [贡献指南](CONTRIBUTING.md)
 
 > 本项目与 Hysteria 官方、原作者的仓库无隶属关系。脚本会修改系统配置并以 root 运行，请自行评估后再使用。
