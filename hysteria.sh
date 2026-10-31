@@ -84,11 +84,36 @@ detect_arch() {
     esac
 }
 
+# 统一下载入口：优先 curl，没有则用 wget（兼容 Alpine 的 busybox wget）
+# 用法：http_get URL [输出文件] [超时秒数]
+http_get() {
+    local url="$1" out="${2:-}" tmo="${3:-30}"
+    if command -v curl >/dev/null 2>&1; then
+        if [ -n "$out" ]; then
+            curl -fsSL --max-time "$tmo" "$url" -o "$out"
+        else
+            curl -fsS4 --max-time "$tmo" "$url" 2>/dev/null || curl -fsS6 --max-time "$tmo" "$url"
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if [ -n "$out" ]; then
+            wget -qO "$out" -T "$tmo" "$url"
+        else
+            wget -qO- -T "$tmo" "$url"
+        fi
+    else
+        return 127
+    fi
+}
+
 ensure_deps() {
     local missing="" c
-    for c in curl wget openssl sha256sum; do
+    for c in openssl sha256sum; do
         command -v "$c" >/dev/null 2>&1 || missing="$missing $c"
     done
+    # curl 与 wget 至少有一个即可（Alpine 默认只有 busybox wget）
+    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+        missing="$missing curl"
+    fi
     [ -z "$missing" ] && return 0
 
     info "缺少依赖:$missing，尝试自动安装..."
@@ -432,11 +457,9 @@ cert_acme() {
     local domain tmp
     ask domain "请输入已解析到本机的域名（例如 example.com）"
     valid_domain "$domain" || die "域名格式不合法"
-    command -v curl >/dev/null 2>&1 || die "缺少 curl"
-
     info "下载并安装 acme.sh ..."
     tmp=$(mktemp /tmp/acme.XXXXXX) || die "无法创建临时文件"
-    curl -fsSL --max-time 60 https://get.acme.sh -o "$tmp" || { rm -f "$tmp"; die "acme.sh 下载失败"; }
+    http_get https://get.acme.sh "$tmp" 60 || { rm -f "$tmp"; die "acme.sh 下载失败"; }
     [ -s "$tmp" ] || { rm -f "$tmp"; die "acme.sh 下载内容为空"; }
     grep -q 'acme.sh' "$tmp" || { rm -f "$tmp"; die "acme.sh 下载内容异常，已中止"; }
     sh "$tmp" >/dev/null 2>&1 || { rm -f "$tmp"; die "acme.sh 安装失败"; }
@@ -518,7 +541,7 @@ do_install() {
     [ -n "$HY_ARCH" ] || die "无法识别 CPU 架构（$(uname -m)），可用 HY_ARCH 环境变量指定，例如 HY_ARCH=arm64"
     info "CPU 架构：$(uname -m) → hysteria-linux-${HY_ARCH}"
 
-    HY_IP=$(curl -fsS4m8 https://ip.gs 2>/dev/null || curl -fsS6m8 https://ip.gs 2>/dev/null)
+    HY_IP=$(http_get https://ip.gs "" 8 2>/dev/null)
     case "$HY_IP" in ''|*[!0-9a-fA-F:.]*) HY_IP="" ;; esac
     if [ -z "$HY_IP" ]; then
         warn "自动获取公网 IP 失败"

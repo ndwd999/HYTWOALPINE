@@ -22,16 +22,30 @@
 
 ## 快速开始
 
-```bash
-# Alpine 需要先装 bash
-apk add --no-cache bash curl
+Alpine 自带的是 busybox 的 `wget`（**没有 curl**），并且默认没装 `bash`，先补齐：
 
-curl -fsSLO https://raw.githubusercontent.com/ndwd999/HYTWOALPINE/main/hysteria.sh
+```bash
+apk add --no-cache bash ca-certificates
+```
+
+下载脚本，两种方式等价，按手头有的工具选一个：
+
+```bash
+# 方式 A：wget（Alpine 开箱即用，推荐）
+wget -O hysteria.sh https://raw.githubusercontent.com/ndwd999/HYTWOALPINE/main/hysteria.sh
+
+# 方式 B：curl
+curl -fsSL -o hysteria.sh https://raw.githubusercontent.com/ndwd999/HYTWOALPINE/main/hysteria.sh
+
 chmod +x hysteria.sh
 ./hysteria.sh
 ```
 
-> 建议先看一眼脚本再执行。不要长期 `curl | bash` 线上版本 —— 仓库一旦被篡改，你会静默执行新代码。
+> `-O` 是大写字母，表示"保存到指定文件名"，目标已存在会被覆盖。
+> 下载完可以先自检：`bash -n hysteria.sh`（无输出即语法正常），再花一分钟扫一眼内容。
+> 若 `wget` 报 `not an http or ftp url` 或证书错误，说明该系统的 busybox 未编译 TLS 支持，改用方式 B（`apk add curl`），或临时加 `--no-check-certificate`（不推荐，仅限排障）。
+>
+> 不建议 `curl ... | bash` 直接管道执行 —— 仓库一旦被篡改，你会静默执行新代码，且无法先审阅。
 
 菜单：
 
