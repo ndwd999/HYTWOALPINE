@@ -1,3 +1,13 @@
+# 日志与临时文件
 *.log
 *.swp
+*~
 .DS_Store
+Thumbs.db
+
+# 本地测试产物（脚本在隔离目录跑测试时产生）
+/test/
+test.sh
+*.diff
+*.orig
+*.bak

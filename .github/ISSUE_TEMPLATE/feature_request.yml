@@ -1,0 +1,58 @@
+name: 功能建议
+description: 希望脚本支持的新能力或改进
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先说明**使用场景**，而不只是"希望加个 X 功能"——这决定了实现方式是否值得。
+
+        注意本项目有明确取舍：**优先 Alpine / busybox 兼容，优先减少依赖**。
+        依赖 GNU 专有命令的实现大概率不会被接受。
+
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用场景
+      description: 你在什么情况下需要它？现在的做法是什么，哪里不方便？
+      placeholder: |
+        我在 NAT 小鸡上部署，出口 IP 和入口 IP 不同，脚本自动探测的 IP 写进客户端配置后连不上……
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望的行为
+      description: 你希望脚本怎么表现？如果有参考实现（其他项目/命令）可以一并说明
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 你考虑过的替代方案
+      description: 比如手动改配置、用别的脚本
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 影响范围
+      options:
+        - 安装流程
+        - 配置管理（端口/密码/站点）
+        - 服务管理（启停/自启）
+        - 证书
+        - 文档
+        - 其他
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: willing
+    attributes:
+      label: 是否愿意提交 PR
+      options:
+        - label: 我可以自己实现并提交 PR
+        - label: 需要维护者实现，我可以帮忙测试

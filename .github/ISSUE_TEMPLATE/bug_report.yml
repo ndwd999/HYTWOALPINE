@@ -1,0 +1,100 @@
+name: Bug 报告
+description: 脚本运行异常、安装失败、服务起不来、客户端连不上
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先确认两件事，这两类问题占了绝大多数：
+
+        1. **UDP 端口已放行**（云安全组默认只开 TCP，Hysteria 2 全程走 UDP）
+        2. 先看过 [README 故障排查](https://github.com/ndwd999/HYTWOALPINE#故障排查)
+
+        安全漏洞请**不要**在这里提，走 [SECURITY.md](https://github.com/ndwd999/HYTWOALPINE/blob/main/SECURITY.md) 的私密通道。
+
+  - type: input
+    id: version
+    attributes:
+      label: 脚本版本
+      description: 运行 `./hysteria.sh -V` 的输出
+      placeholder: "1.1.1"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: 系统与架构
+      description: "`cat /etc/os-release | head -3` 与 `uname -m`"
+      placeholder: "Alpine Linux v3.20 / x86_64"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cert
+    attributes:
+      label: 证书方式
+      options:
+        - 自签（默认）
+        - ACME 自动申请
+        - 导入已有证书
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stage
+    attributes:
+      label: 问题出现在哪个环节
+      options:
+        - 下载脚本
+        - 安装（下载/校验内核）
+        - 生成配置
+        - 服务启动
+        - 客户端连接
+        - 修改配置（端口/密码/站点）
+        - 卸载
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 现象
+      description: 实际发生了什么？完整的报错信息请贴出来（可先去掉 IP、密码等敏感信息）
+      placeholder: |
+        执行到"校验内核"时退出，输出：
+        [x] SHA256 校验失败 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. apk add bash
+        2. wget -O hysteria.sh ...
+        3. ./hysteria.sh，选 1，证书选 1，端口 23456，密码留空
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志
+      description: "`tail -50 /var/log/hysteria.log`；服务状态可用 `rc-service hysteria status`"
+      render: shell
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 确认项
+      options:
+        - label: 已确认对应 UDP 端口在安全组/防火墙放行
+          required: true
+        - label: 已阅读 README 的故障排查章节
+          required: true
+        - label: 这不是安全漏洞（漏洞请走私密通道）
+          required: true

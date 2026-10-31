@@ -17,7 +17,7 @@
 #
 set -o pipefail
 
-SCRIPT_VERSION="1.1.0"
+SCRIPT_VERSION="1.1.1"
 UPSTREAM_REPO="apernet/hysteria"
 DL_BASE="https://github.com/${UPSTREAM_REPO}/releases/latest/download"
 

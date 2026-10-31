@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞（私密报告）
+    url: https://github.com/ndwd999/HYTWOALPINE/security/advisories/new
+    about: 请勿在公开 Issue 中披露安全问题，使用此私密通道
+  - name: 上游内核问题
+    url: https://github.com/apernet/hysteria/issues
+    about: 内核本身的 bug（非本脚本问题）请反馈给 apernet/hysteria
+  - name: Hysteria 官方文档
+    url: https://hysteria.network/zh/docs/
+    about: 协议配置项的含义与用法
